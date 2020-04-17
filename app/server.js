@@ -31,11 +31,12 @@ var client = new tmi.client(
 );
 
 var commandRegex = config.regexCommands ||
-new RegExp('^(' + config.commands.join('|') + ')$', 'i');
+new RegExp('^(' + config.commands.join('|') + (config.substatement || '') + ')$', 'i');
 
 client.addListener('chat', function(channel, userstate, message, self) {
     //console.log("Message, from channel: " + channel + ", message: " + message);
-    if (config.channel == channel && message.match(commandRegex)) {
+    msg = message.toLowerCase()
+    if (config.channel == channel && msg.match(commandRegex)) {
 
         if (config.printToConsole) {
             //format console output if needed
@@ -43,15 +44,15 @@ client.addListener('chat', function(channel, userstate, message, self) {
             var maxName = config.maxCharName,
             maxCommand = config.maxCharCommand,
             logFrom = from.substring(0, maxName),
-            logMessage = message.substring(0, 6).toLowerCase();
+            logMessage = msg.substring(0, maxCommand).toLowerCase();
             //format log
             console.log(printf('%-' + maxName + 's % ' + maxCommand + 's',
                 logFrom, logMessage));
         }
 
-        // Should the message be sent the program?
+        // Should the msg be sent the program?
         if (config.sendKey) {
-            keyHandler.sendKey(message.toLowerCase());
+            keyHandler.sendKey(msg);
         }
     }
 });

@@ -6,6 +6,11 @@ lib-cov
 *.out
 *.pid
 *.gz
+*.o
+*.a
+*.so
+
+test_server
 
 pids
 logs

@@ -3,10 +3,11 @@ var nconf = require('nconf').argv().env().file({ file:'config.json' });
 // List of commands to check for
 var commands = [
     'left', 'right', 'up', 'down',
-    'start', 'select',
-    'a', 'b',
-    'democracy', 'anarchy'
+    'start', 'return',
+    'autoplay', 'freeplay'
 ];
+
+var substatement = '|7|9|5|1|3|q|e|s|z|c|upleft|upright|center|downleft|downright|7\\s+.+|9\\s+.+|5\\s+.+|1.\\s+.+|3\\s+.+|q\\s+.+|e\\s+.+|s\\s+.+|z\\s+.+|c\\s+.+|upleft\\s+.+|upright\\s+.+|center\\s+.+|downleft\\s+.+|downright\\s+.+';
 
 var username = process.env.TWITCH_USERNAME || nconf.get('TWITCH_USERNAME');
 var oauth = process.env.TWITCH_OAUTH || nconf.get('TWITCH_OAUTH');
@@ -43,7 +44,7 @@ var ircConfig = {
     maxCharName: maxCharName || 8,
     // Maximum characters to show for a command in the console log
     // Ex: left => left since only 4 char, democracy => democra
-    maxCharCommand: maxCharCommand || 10,
+    maxCharCommand: maxCharCommand || 20,
 
     // If you need to filter the commands sent to the program
     // Ex: democracy/anarchy since they don't affect the program itself
@@ -62,7 +63,8 @@ var ircConfig = {
     delay: 100,
 
     sendKey: sendKey,
-    commands: commands
+    commands: commands,
+    substatement: substatement
 };
 
 module.exports = ircConfig;

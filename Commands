@@ -1,0 +1,29 @@
+Command usage:
+  
+  (key) [#|(0 1/4 1/2 3/4 1/3 2/3 5/6)] [B1|B2|B3|B4] [H#]
+    Any key will be pressed at specific time.
+    If there is only the key command without arguments, the key will be pressed 1/4 beat after received by the bot.
+    The key will be pressed as soon as received + the number of beats specified.
+    You can specify the number of beats, the key will be pressed aligned with 1/4 or 1/6 beat depending of the arguments.
+    If you specify H and a number of beats, the hold will maintain. However, the hold will be canceled if another user presses the same key.
+    Either for the beats or the hold beats, you cannot specify more than 4 beats (1 measure)
+    
+  (7|q|UpLeft) [Arguments]
+    Presses Up-Left arrow
+  (9|e|UpRight) [Arguments]
+    Presses Up-Right arrow
+  (5|s|Center) [Arguments]
+    Presses Center arrow
+  (1|z|DownRight) [Arguments]
+    Presses Down-Right arrow
+  (3|c|DownRight) [Arguments]
+    Presses Down-Right arrow
+    
+  autoplay
+    Sets the autoplay vote. This is the equivalent of "democracy".
+    If the autoplay is set, the game plays itself (Only in PRIME).
+    Consider that if there is another player, the autoplay will benefit also him.
+    
+  freeplay
+    Sets the freeplay vote. This is the equivalent of "anarchy".
+    Just pulls the regular key press poll.

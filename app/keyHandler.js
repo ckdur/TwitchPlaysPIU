@@ -1,61 +1,42 @@
-var exec = require('child_process').exec,
-config = require('./config.js'),
+var config = require('./config.js'),
 lastTime = {},
 windowID = 'unfilled',
 throttledCommands = config.throttledCommands,
 regexThrottle = new RegExp('^(' + throttledCommands.join('|') + ')$', 'i'),
 regexFilter = new RegExp('^(' + config.filteredCommands.join('|') + ')$', 'i');
 
-for (var i = 0; i < throttledCommands.length; i++) {
-    lastTime[throttledCommands[i]] = new Date().getTime();
-}
+var net = require('net');
 
-function setWindowID() {
-    if (config.os === 'other' & windowID === 'unfilled') {
-        exec('xdotool search --onlyvisible --name ' + config.programName, function(error, stdout) {
-            windowID = stdout.trim();
-            // console.log(key, windowID);
-        });
-    }
-}
+var HOST = '127.0.0.1';
+var PORT = 1025;
 
-var defaultKeyMap = config.keymap || {
-    'up':'Up','left':'Left','down':'Down','right':'Right',
-    'a':'a','b':'b',
-    'x':'x','y':'y',
-    'start':'s','select':'e'
-};
+var clientReady = false;
+var client = new net.Socket();
+client.connect(PORT, HOST, function() {
+  console.log('CONNECTED TO: ' + HOST + ':' + PORT);
+  clientReady = true;
+  setInterval(function() {
+    client.write("nothing\n");
+  }, 1500);
+});
+
+// Add a 'data' event handler for the client socket
+// data is what the server sent to this socket
+client.on('data', function(data) {
+  // Nothing here, maybe
+});
+
+// Add a 'close' event handler for the client socket
+client.on('close', function() {
+  console.log('Connection closed');
+});
 
 function sendKey(command) {
-    //if doesn't match the filtered words
-    if (!command.match(regexFilter)) {
-        var allowKey = true,
-        key = defaultKeyMap[command] || command;
-        //throttle certain commands (not individually though)
-        if (key.match(regexThrottle)) {
-            var newTime = new Date().getTime();
-            if (newTime - lastTime[key] < config.timeToWait) {
-                allowKey = false;
-            } else {
-                lastTime = newTime;
-            }
-        }
-        if (allowKey) {
-            //if xdotool is installed
-            if (config.os === 'other') {
-                //Send to preset window under non-windows systems
-                exec('xdotool key --window ' + windowID + ' --delay ' + config.delay + ' ' + key);
-            } else {
-                //use python on windows
-                // "VisualBoyAdvance"
-                // "DeSmuME 0.9.10 x64"
-                exec('key.py' + '  ' + config.programName + ' ' + key);
-            }
-        }
-    }
+  //if doesn't match the filtered words
+  if (!command.match(regexFilter) &&
+      clientReady) {
+    client.write(command + '\n');
+  }
 }
-
-//Only actually does something when not running under windows.
-setWindowID();
 
 exports.sendKey = sendKey;
