@@ -6,6 +6,7 @@ regexThrottle = new RegExp('^(' + throttledCommands.join('|') + ')$', 'i'),
 regexFilter = new RegExp('^(' + config.filteredCommands.join('|') + ')$', 'i');
 
 var net = require('net');
+var normalize = require('normalize-space');
 
 var HOST = '127.0.0.1';
 var PORT = 1025;
@@ -35,7 +36,7 @@ function sendKey(command) {
   //if doesn't match the filtered words
   if (!command.match(regexFilter) &&
       clientReady) {
-    client.write(command + '\n');
+    client.write(normalize(command) + '\n');
   }
 }
 

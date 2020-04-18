@@ -61,47 +61,50 @@ void* runhere(void* context) {
       XNextEvent(d, &e);
       if (e.type == Expose) {
         
-        if(!(bytes_f[0] & 0x1)) {
+        if(!(bytes_f[0] & 0x1) || !(bytes_g[0] & 0x1)) {
           XSetForeground(d, gc, red.pixel);
           XFillRectangle(d, w, gc, 5, 5, 60, 80);
         }
-        if(!(bytes_f[0] & 0x2)) {
+        if(!(bytes_f[0] & 0x2) || !(bytes_g[0] & 0x2)) {
           XSetForeground(d, gc, red.pixel);
           XFillRectangle(d, w, gc, 5+60*2, 5, 60, 80);
         }
-        if(!(bytes_f[0] & 0x4)) {
+        if(!(bytes_f[0] & 0x4) || !(bytes_g[0] & 0x4)) {
           XSetForeground(d, gc, yellow.pixel);
           XFillRectangle(d, w, gc, 5+60, 5+70, 60, 60);
         }
-        if(!(bytes_f[0] & 0x8)) {
+        if(!(bytes_f[0] & 0x8) || !(bytes_g[0] & 0x8)) {
           XSetForeground(d, gc, blue.pixel);
           XFillRectangle(d, w, gc, 5, 5+70+50, 60, 80);
         }
-        if(!(bytes_f[0] & 0x10)) {
+        if(!(bytes_f[0] & 0x10) || !(bytes_g[0] & 0x10)) {
           XSetForeground(d, gc, blue.pixel);
           XFillRectangle(d, w, gc, 5+60*2, 5+70+50, 60, 80);
         }
         
-        if(!(bytes_f[2] & 0x1)) {
+        if(!(bytes_f[2] & 0x1) || !(bytes_g[2] & 0x1)) {
           XSetForeground(d, gc, red.pixel);
           XFillRectangle(d, w, gc, 60*3+5+5, 5, 60, 80);
         }
-        if(!(bytes_f[2] & 0x2)) {
+        if(!(bytes_f[2] & 0x2) || !(bytes_g[2] & 0x2)) {
           XSetForeground(d, gc, red.pixel);
           XFillRectangle(d, w, gc, 60*3+5+5+60*2, 5, 60, 80);
         }
-        if(!(bytes_f[2] & 0x4)) {
+        if(!(bytes_f[2] & 0x4) || !(bytes_g[2] & 0x4)) {
           XSetForeground(d, gc, yellow.pixel);
           XFillRectangle(d, w, gc, 60*3+5+5+60, 5+70, 60, 60);
         }
-        if(!(bytes_f[2] & 0x8)) {
+        if(!(bytes_f[2] & 0x8) || !(bytes_g[2] & 0x8)) {
           XSetForeground(d, gc, blue.pixel);
           XFillRectangle(d, w, gc, 60*3+5+5, 5+70+50, 60, 80);
         }
-        if(!(bytes_f[2] & 0x10)) {
+        if(!(bytes_f[2] & 0x10) || !(bytes_g[2] & 0x10)) {
           XSetForeground(d, gc, blue.pixel);
           XFillRectangle(d, w, gc, 60*3+5+5+60*2, 5+70+50, 60, 80);
         }
+        
+        bytes_g[2] = 0xFF;
+        bytes_g[0] = 0xFF;
         
         XSetForeground(d, gc, white.pixel);
         XDrawRectangle(d, w, gc, 5, 5, 60, 80);
@@ -144,6 +147,42 @@ void* runhere(void* context) {
           XFillRectangle(d, w, gc, 375+32*4, 197, 32, 10);
         }
         
+        // Draw the guide line for BPM
+        unsigned long t = GetCurrentTime();
+        unsigned long timePerBeat = (unsigned long)abs(60000000.0/fBPM);
+        unsigned long part = (t - tlastchange) % timePerBeat;
+        
+        // If the part of the subbeat is less than 1/4, draw the line
+        if(part < (timePerBeat / 4)) {
+          XSetForeground(d, gc, white.pixel);
+          XFillRectangle(d, w, gc, 375, 5, 32*5, 8);
+        }
+        
+        // Draw the presses
+        double beat = GetBeat(t);
+        for(int i = 0; i < scomms; i++) {
+          int x, y, dx, dy;
+          for(int j = 0; j < 5; j++) {
+            if(!((comms[i].p2 >> j) & 0x1)) {
+              if(j == 0) x = 375 + 32*1;
+              if(j == 1) x = 375 + 32*3;
+              if(j == 2) x = 375 + 32*2;
+              if(j == 3) x = 375 + 32*0;
+              if(j == 4) x = 375 + 32*4;
+              y = (int)((comms[i].beat - beat)*32.0) + 5;
+              dx = 32;
+              dy = 8;
+              if(comms[i].isHold) {
+                dy = (int)((comms[i].beatEnd - beat)*32.0) + 5 - y;
+              }
+              if(j == 1 || j == 0) XSetForeground(d, gc, red.pixel);
+              if(j == 2) XSetForeground(d, gc, yellow.pixel);
+              if(j == 3 || j == 4) XSetForeground(d, gc, blue.pixel);
+              XFillRectangle(d, w, gc, x, y, dx, dy);
+            }
+          }
+        }
+        
         // Lights are:
         // Neon:      bytes_l[1] & 0x04
         // L1:        bytes_l[2] & 0x80
@@ -161,7 +200,11 @@ void* runhere(void* context) {
           (byte & 0x04 ? '1' : '0'), \
           (byte & 0x02 ? '1' : '0'), \
           (byte & 0x01 ? '1' : '0') 
-        //char msg[255];
+        char msg[255];
+        sprintf(msg, "BPM: %.3g", fBPM);
+        XSetForeground(d, gc, white.pixel);
+        XDrawString(d, w, gc, 60*3+5+70, 5+70+50+30, msg, strlen(msg));
+        
         //sprintf(msg, BYTE_TO_BINARY_PATTERN " " BYTE_TO_BINARY_PATTERN " " BYTE_TO_BINARY_PATTERN " " BYTE_TO_BINARY_PATTERN, 
         //  BYTE_TO_BINARY(bytes_l[3]), 
         //  BYTE_TO_BINARY(bytes_l[2]), 

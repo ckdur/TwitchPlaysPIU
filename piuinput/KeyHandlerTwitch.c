@@ -10,15 +10,35 @@
 #include <sys/types.h> 
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <math.h>
 
 char bytes_t[4];
 char bytes_tb[2];
 pthread_mutex_t mutex;
 void* runserver(void*);
 void HandleBuffer(int deploy_full);
+struct command_spec* comms = NULL;
+int scomms = 0;
+int cap_comms = 128;
+unsigned long GetCurrentTime();
+
+void check_comms_capacity(int size) {
+  if(size < cap_comms) {
+    cap_comms = (size/128 + 1) * 128;
+    comms = (struct command_spec*)realloc(comms, sizeof(struct command_spec)*cap_comms);
+  }
+}
 
 void KeyHandler_Twitch_Init(void) {
+	bytes_g[0] = 0xFF;
+	bytes_g[1] = 0xFF;
+	bytes_g[2] = 0xFF;
+	bytes_g[3] = 0xFF;
+	tlastchange = GetCurrentTime();
+	
   pthread_t server;
+  
+  comms = (struct command_spec*)malloc(sizeof(struct command_spec)*cap_comms);
   
   if (pthread_mutex_init(&mutex, NULL) != 0) { 
     printf("\n mutex init has failed for twitch server\n"); 
@@ -141,7 +161,33 @@ void RebaseBuffer(int index) {
   buf[siz] = 0;
 }
 
+unsigned long GetCurrentTime()
+{
+  struct timespec tv;
+  clock_gettime(CLOCK_MONOTONIC, &tv);
+  return 1000000 * tv.tv_sec + tv.tv_nsec/1000;
+}
+
+double GetBeat(unsigned long t)
+{
+  return (double)(t-tlastchange) / 60000000.0 * fBPM ;
+}
+
+double GetBeat2(unsigned long t, double BPM)
+{
+  return (double)(t) / 60000000.0 * BPM ;
+}
+
+double GetCurrentBeat()
+{
+  unsigned long t = GetCurrentTime();
+  return GetBeat(t);
+}
+
 int ul = 0, ur = 0, ce = 0, dl = 0, dr = 0;
+char bytes_g[4];
+unsigned long delay = 100000; // 100ms
+double maxBeats = 8.0;
 void HandleBuffer(int deploy_full) {
   if(siz <= 0) return;
   //printf("Entering: HandleBuffer\n");
@@ -169,24 +215,138 @@ void HandleBuffer(int deploy_full) {
     else {
       // It found the \n, convert it to \0 and do whatever
       (*f) = 0;
-      //printf("Found! %s\n", bufaux);
+      //printf("Command: %s\n", bufaux);
+      char* f2 = bufaux;
+      char* fs = bufaux;
+      char first = 1;
+      struct command_spec spec;
+      spec.p1 = 0xFF;
+      spec.p2 = 0xFF;
+      spec.isHold = 0;
+      // To determinate the beat, we need to get the current time
+      // add the delay time
+      // and also assume for now that we are going to aligh
+      // at 1/4 of the beat
+      // So, the beat has to be a multiple of 1/4
+      unsigned long t = GetCurrentTime() + delay;
+      double addBeat = 0.0;
+      double addHold = 0.0;
+      double beatAlign = 0.25;
+      
+      // Now, analyze the command
+      
+      while(1) {
+        // Try to find the first space
+        f2 = strchr(f2, ' ');
+        if(f2 == NULL) f2 = f; // If there is no space, just take the command whole
+        
+        // Nullify the space, so we can treat it like a string
+        (*f2) = 0;
+        
+        // Now, we have here an argument try to see what it is
+        // Assume that they are already filtered
+        //printf("  Argument: %s\n", fs);
+        
+        // If this is the first one, then try
+        if(first) {
+          if(strcmp(fs, "upleft")  == 0) {
+            spec.p2 &= ~0x1;
+          }
+          if(strcmp(fs, "upright")  == 0) {
+            spec.p2 &= ~0x2;
+          }
+          if(strcmp(fs, "center")  == 0) {
+            spec.p2 &= ~0x4;
+          }
+          if(strcmp(fs, "downleft")  == 0) {
+            spec.p2 &= ~0x8;
+          }
+          if(strcmp(fs, "downright")  == 0) {
+            spec.p2 &= ~0x10;
+          }
+          int len = strlen(fs);
+          for(int i = 0; i < len; i++) {
+            if(fs[i] == 'q' || fs[i] == '7') {
+              spec.p2 &= ~0x1;
+            }
+            if(fs[i] == 'e' || fs[i] == '9') {
+              spec.p2 &= ~0x2;
+            }
+            if(fs[i] == 's' || fs[i] == '5') {
+              spec.p2 &= ~0x4;
+            }
+            if(fs[i] == 'z' || fs[i] == '1') {
+              spec.p2 &= ~0x8;
+            }
+            if(fs[i] == 'c' || fs[i] == '3') {
+              spec.p2 &= ~0x10;
+            }
+          }
+        }
+        
+        else { 
+          // Search for the rest
+          
+          // x/x
+          if('0' <= fs[0] && fs[0] <= '9' &&
+             '0' <= fs[2] && fs[2] <= '9' &&
+             fs[1] == '/') {
+             // Get how much do we need to add
+             addBeat += (double)(fs[0] - '0')/(double)(fs[2] - '0');
+             // Also get the align
+             // The 2 is just for forcing 1/4
+             if(fs[2] == '2') beatAlign = 0.25;
+             else beatAlign = 1.0/(double)(fs[2] - '0');
+          }
+          
+          // hxxx.xxx
+          else if(fs[0] == 'h') {
+            char* conv = fs+1;
+            double beat = 0.0;
+            int arg = sscanf(conv, "%lg", &beat);
+            if(arg == 1) {
+              addHold += beat;
+              spec.isHold = 1;
+            }
+          }
+          
+          // xxx.xxx
+          else {
+            double beat = 0.0;
+            int arg = sscanf(fs, "%lg", &beat);
+            if(arg == 1) {
+              addBeat += beat;
+            }
+          }
+        }
+        
+        // Flag as this is not the first one
+        first = 0;
+        
+        // Try to put the search pointer afterwards;
+        f2++;
+        fs = f2;
+        if(f2 >= f) break; // Nothing more to see here
+      }
+      
+      // Calculate the beats
+      // We add 1 because adding the if(fmod(beat, beatAlign) == 0.0) is almost always true
+      spec.beat = (floor(GetBeat(t) / beatAlign) + 1.0) * beatAlign + addBeat; 
+      spec.beatEnd = spec.beat + addHold;
+      
+      // if this is true, we add the command
       pthread_mutex_lock(&mutex);
-      if(bufaux[0] == 'z') {
-        dl = 1;
-      }
-      if(bufaux[0] == 'c') {
-        dr = 1;
-      }
-      if(bufaux[0] == 's') {
-        ce = 1;
-      }
-      if(bufaux[0] == 'q') {
-        ul = 1;
-      }
-      if(bufaux[0] == 'e') {
-        ur = 1;
+      if(addBeat <= maxBeats && strcmp(bufaux, "nothing") != 0) {
+        check_comms_capacity(scomms + 1);
+        memcpy(&comms[scomms], &spec, sizeof(struct command_spec));
+        scomms++;
+        
+        printf("Added command (%d:%d): %.2x %.2x %g %g (%d)\n", scomms, cap_comms, spec.p1, spec.p2, spec.beat, spec.beatEnd, spec.isHold);
+        
+        // TODO: Ok, now we added the command, but now we need to check the holds a little
       }
       pthread_mutex_unlock(&mutex);
+      
       bufaux = f + 1;
       if(bufaux >= bufend) {
         // Just drop it, nothing else to see here
@@ -199,22 +359,163 @@ void HandleBuffer(int deploy_full) {
   //printf("Current state of the buf: %s\n", buf);
 }
 
+void OnUpdateBPM(unsigned long bef, double bBPM) {
+  // In this function, we want to update the beat of all the stuff, as the reference updated
+  pthread_mutex_lock(&mutex);
+  
+  double beats = GetBeat2(tlastchange - bef, bBPM);
+  printf("The number of beats to update: %g\n", beats);
+  for(int i = 0; i < scomms; i++) {
+    comms[i].beat -= beats;
+    comms[i].beatEnd -= beats;
+    printf("Command %d changed: %g\n", i, comms[i].beat);
+  }
+  
+  pthread_mutex_unlock(&mutex);
+}
+
 void KeyHandler_Twitch_Poll(void) {
   pthread_mutex_lock(&mutex);
   bytes_t[0] = 0xFF;
   bytes_t[1] = 0xFF;
   bytes_t[2] = 0xFF;
-  if(ul) { bytes_t[2] &= ~(0x01); ul = 0; }
-  if(ur) { bytes_t[2] &= ~(0x02); ur = 0; }
-  if(ce) { bytes_t[2] &= ~(0x04); ce = 0; }
-  if(dl) { bytes_t[2] &= ~(0x08); dl = 0; }
-  if(dr) { bytes_t[2] &= ~(0x10); dr = 0; }
   bytes_t[3] = 0xFF;
   bytes_tb[0] = 0xFF;
   bytes_tb[1] = 0xFF;
+
+#define MAX_PROCS 128
+  int expired[MAX_PROCS];
+  int count = 0;
+  double beat = GetCurrentBeat();
+  // Explore all the commands for now
+  for(int i = 0; i < scomms; i++) {
+    if(beat >= comms[i].beat) {
+      bytes_t[0] &= comms[i].p1;
+      bytes_t[2] &= comms[i].p2;
+      bytes_g[0] &= comms[i].p1;
+      bytes_g[2] &= comms[i].p2;
+      // Mark as expired only if the hold is not vigent
+      if(comms[i].isHold) {
+        if(beat <= comms[i].beatEnd) {
+          continue;
+        }
+      }
+      expired[count] = i;
+      count++;
+      if(count >= MAX_PROCS) break; // Process no more
+    }
+  }
+  // Erase all the commands expired
+  if(count > 0) {
+    int ie = 0;
+    int dest = 0;
+    printf("Count = %d\n", count);
+    for(int i = 0; i < scomms; i++) {
+      if(expired[ie] != i)
+      {
+        if(dest != i) { // A little performance
+          memcpy(&comms[dest], &comms[i], sizeof(struct command_spec));
+          printf("Source: %d, Destination: %d\n", i, dest);
+        }
+        dest++;
+      }
+      else { 
+        ie++;
+      }
+    }
+    scomms -= count;
+  }
   pthread_mutex_unlock(&mutex);
 }
 
+double fBPM = 120.0; // Assumed from the beginning
+unsigned long tlastchange = 0;
+char L1P = 0 ;
+char L2P = 0 ;
+char L3P = 0 ;
+char L4P = 0 ;
+char L5P = 0 ;
+#define SAMPLES 5
+char sensed = 0;
+unsigned long tlast[SAMPLES] = {0, 0, 0, 0, 0};
+#define TOLERANCE 0.05 // From 0 to 1 (0 to 100%)
 void KeyHandler_Twitch_UpdateLights(char* bytes) {
+  
+  // Subprogram to detect the BPM and the delay of a song
+  
+  // Extract the light status
+  char L1 = (bytes[2] & 0x80) ? 1:0 ;
+  char L2 = (bytes[3] & 0x01) ? 1:0 ;
+  char L3 = (bytes[3] & 0x04) ? 1:0 ;
+  char L4 = (bytes[3] & 0x02) ? 1:0 ;
+  char L5 = (bytes[1] & 0x04) ? 1:0 ;
+  
+  // Lights rise?
+  char L1R = (!L1P && L1) ;
+  char L2R = (!L2P && L2) ;
+  char L3R = (!L3P && L3) ;
+  char L4R = (!L4P && L4) ;
+  char L5R = (!L5P && L5) ;
+  
+  if(L1R || L2R || L3R || L4R || L5R) {
+    // Any light just rised. 
+    // This is going to be a beat marker
+    unsigned long t = GetCurrentTime();
+    
+    // This is the first time sensed?
+    for(int i = SAMPLES-2; i >= 0; i--)
+      tlast[i+1] = tlast[i];
+    tlast[0] = t;
+    if(sensed < SAMPLES) {
+      sensed++;
+      L1P = L1 ;  L2P = L2 ;  L3P = L3 ;  L4P = L4 ;  L5P = L5 ;
+      return;
+    }
+    
+    // Sense the BPM here and see if matches (or a power-of-two equivalent)
+    double decBPM = 0.0;
+    int count = 0;
+    for(int i = 0; i < (SAMPLES-1); i++) {
+      // 1/us (1000000 us / 1 s) (60 s / 1 m) = 1/m (or BPM) 
+      double dBPM = 60000000.0/(double)(tlast[i] - tlast[i+1]);
+      if(dBPM > 0.0) {
+        double exp = round(log(fBPM/dBPM)/log(2.0));
+        double cBPM = dBPM*pow(2.0, exp); // Co-related BPM
+        decBPM += cBPM;
+        count++;
+      }
+    }
+    decBPM /= (double)count; 
+    
+    // We need to avoid that BPM is negative or zero
+    if(decBPM > 0.0) {
+      // The objective is to get a correlation between the current BPM
+      
+      // Get the log2 of the detected BPM divided by the current BPM, also round it
+      double exp = round(log(fBPM/decBPM)/log(2.0));
+      
+      // So, lets see if there is a correlation
+      double cBPM = decBPM*pow(2.0, exp); // Co-related BPM
+      double diff = abs(cBPM - fBPM) / fBPM;
+      if(diff > TOLERANCE) {
+        // The tolerance test didnt pass. 
+        // That means that there is a change of BPM.
+        // Careful, this does not detect slow parts obviusly
+        while(cBPM > 400.0) // I mean, there is no such song at 400 BPM or more
+          cBPM /= 2.0;
+        while(cBPM < 80.0) // The slowest BPM in PIU is 80
+          cBPM *= 2.0;
+        printf("BPM change: %g -> %g (%g), exp=%g, diff=%g\n", fBPM, cBPM, decBPM, exp, diff);
+        unsigned long bef = tlastchange;
+        double bBPM = fBPM;
+        fBPM = cBPM;
+        tlastchange = t;
+        OnUpdateBPM(bef, bBPM);
+      }
+    }
+  }
+  
+  
+  L1P = L1 ;  L2P = L2 ;  L3P = L3 ;  L4P = L4 ;  L5P = L5 ;
 }
 

@@ -7,7 +7,7 @@ var commands = [
     'autoplay', 'freeplay'
 ];
 
-var substatement = '|7|9|5|1|3|q|e|s|z|c|upleft|upright|center|downleft|downright|7\\s+.+|9\\s+.+|5\\s+.+|1.\\s+.+|3\\s+.+|q\\s+.+|e\\s+.+|s\\s+.+|z\\s+.+|c\\s+.+|upleft\\s+.+|upright\\s+.+|center\\s+.+|downleft\\s+.+|downright\\s+.+';
+var substatement = '|[79513qeszc]+|upleft|upright|center|downleft|downright|[79513qeszc]+\\s+.+|upleft\\s+.+|upright\\s+.+|center\\s+.+|downleft\\s+.+|downright\\s+.+';
 
 var username = process.env.TWITCH_USERNAME || nconf.get('TWITCH_USERNAME');
 var oauth = process.env.TWITCH_OAUTH || nconf.get('TWITCH_OAUTH');
