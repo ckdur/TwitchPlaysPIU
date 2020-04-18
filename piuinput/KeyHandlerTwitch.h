@@ -5,6 +5,7 @@ extern char bytes_t[4];
 extern char bytes_tb[2];
 extern double fBPM;
 extern unsigned long tlastchange;
+extern unsigned long delay;
 void KeyHandler_Twitch_Init(void);
 void KeyHandler_Twitch_Poll(void);
 void KeyHandler_Twitch_UpdateLights(char* bytes);

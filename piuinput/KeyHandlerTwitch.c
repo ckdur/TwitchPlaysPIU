@@ -186,7 +186,7 @@ double GetCurrentBeat()
 
 int ul = 0, ur = 0, ce = 0, dl = 0, dr = 0;
 char bytes_g[4];
-unsigned long delay = 100000; // 100ms
+unsigned long delay = 0; // 5 secs
 double maxBeats = 8.0;
 void HandleBuffer(int deploy_full) {
   if(siz <= 0) return;
@@ -232,6 +232,7 @@ void HandleBuffer(int deploy_full) {
       double addBeat = 0.0;
       double addHold = 0.0;
       double beatAlign = 0.25;
+      char notadd = 0;
       
       // Now, analyze the command
       
@@ -249,6 +250,21 @@ void HandleBuffer(int deploy_full) {
         
         // If this is the first one, then try
         if(first) {
+          // Common commands
+          
+          if(strcmp(fs, "delay")  == 0) {
+            notadd = 1;
+            char* conv = f2+1;
+            long k;
+            int arg = sscanf(conv, "%ld", &k);
+            if(arg == 1) {
+              if(((long)delay + k*1000) <= 0) delay = 0;
+              delay = (unsigned long)((long)delay + k*1000);
+              if(delay > 30000000) delay = 30000000;
+            }
+            break;
+          }
+        
           if(strcmp(fs, "upleft")  == 0) {
             spec.p2 &= ~0x1;
           }
@@ -336,7 +352,7 @@ void HandleBuffer(int deploy_full) {
       
       // if this is true, we add the command
       pthread_mutex_lock(&mutex);
-      if(addBeat <= maxBeats && strcmp(bufaux, "nothing") != 0) {
+      if(addBeat <= maxBeats && strcmp(bufaux, "nothing") != 0 && !notadd) {
         check_comms_capacity(scomms + 1);
         memcpy(&comms[scomms], &spec, sizeof(struct command_spec));
         scomms++;

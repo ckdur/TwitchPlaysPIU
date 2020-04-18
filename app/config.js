@@ -7,6 +7,7 @@ var commands = [
     'autoplay', 'freeplay'
 ];
 
+var subdelay = '|delay\\s+[\-0-9]+';
 var substatement = '|[79513qeszc]+|upleft|upright|center|downleft|downright|[79513qeszc]+\\s+.+|upleft\\s+.+|upright\\s+.+|center\\s+.+|downleft\\s+.+|downright\\s+.+';
 
 var username = process.env.TWITCH_USERNAME || nconf.get('TWITCH_USERNAME');

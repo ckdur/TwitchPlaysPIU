@@ -201,9 +201,11 @@ void* runhere(void* context) {
           (byte & 0x02 ? '1' : '0'), \
           (byte & 0x01 ? '1' : '0') 
         char msg[255];
-        sprintf(msg, "BPM: %.3g", fBPM);
         XSetForeground(d, gc, white.pixel);
+        sprintf(msg, "BPM: %.3g", fBPM);
         XDrawString(d, w, gc, 60*3+5+70, 5+70+50+30, msg, strlen(msg));
+        sprintf(msg, "D: %ldms", delay/1000);
+        XDrawString(d, w, gc, 60*3+5+70, 5+70+50+30+20, msg, strlen(msg));
         
         //sprintf(msg, BYTE_TO_BINARY_PATTERN " " BYTE_TO_BINARY_PATTERN " " BYTE_TO_BINARY_PATTERN " " BYTE_TO_BINARY_PATTERN, 
         //  BYTE_TO_BINARY(bytes_l[3]), 
