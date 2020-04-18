@@ -409,13 +409,13 @@ void KeyHandler_Twitch_Poll(void) {
   if(count > 0) {
     int ie = 0;
     int dest = 0;
-    printf("Count = %d\n", count);
+    //printf("Count = %d\n", count);
     for(int i = 0; i < scomms; i++) {
       if(expired[ie] != i)
       {
         if(dest != i) { // A little performance
           memcpy(&comms[dest], &comms[i], sizeof(struct command_spec));
-          printf("Source: %d, Destination: %d\n", i, dest);
+          //printf("Source: %d, Destination: %d\n", i, dest);
         }
         dest++;
       }
