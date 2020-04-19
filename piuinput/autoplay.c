@@ -29,7 +29,7 @@ void update_autoplay () {
     (*player1_auto) = 0xFFFFFFFF;
   
 	if(auto_2 != -1) // HEH DEMO PLAY HUEHUE
-    (*player2_auto) = auto_1;
+    (*player2_auto) = auto_2;
 	else
     (*player2_auto) = 0xFFFFFFFF;
 }

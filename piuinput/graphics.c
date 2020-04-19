@@ -239,16 +239,19 @@ void update_graphics(void) {
         int limx = 5 + (int)(limitAnarchy*sizepix);
         
         // Lines
-        XDrawLine(d, w, gc, curx, 5+70+50+80+ 10, curx, 5+70+50+80+ 20);
-        XSetForeground(d, gc, green.pixel);
         XFillRectangle(d, w, gc, limx, 5+70+50+80+ 10, sizepix-limx+5, 10);
-        XSetForeground(d, gc, white.pixel);
+        XDrawLine(d, w, gc, curx, 5+70+50+80+ 10, curx, 5+70+50+80+ 20);
+        
+        if(currentAnarchy >= limitAnarchy)
+          XSetForeground(d, gc, brown.pixel);
+        
         if(directionAnarchy > 0) {
           XDrawLine(d, w, gc, curx+2, 5+70+50+80+ 15, curx+12, 5+70+50+80+ 15);
         }
         else if(directionAnarchy < 0) {
           XDrawLine(d, w, gc, curx-2, 5+70+50+80+ 15, curx-12, 5+70+50+80+ 15);
         }
+        XSetForeground(d, gc, white.pixel);
         
         // guides
         XDrawRectangle(d, w, gc, 5, 5+70+50+80+ 10, sizepix, 10);

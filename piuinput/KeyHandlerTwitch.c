@@ -1,4 +1,5 @@
 #include "KeyHandlerTwitch.h"
+#include "autoplay.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -461,6 +462,14 @@ void KeyHandler_Twitch_Poll(void) {
   bytes_tb[1] = 0xFF;
   
   handle_socket();
+  
+  // Autoplay stuff
+  if(currentAnarchy >= limitAnarchy) {
+    auto_2 = rand() % 4;
+  }
+  else {
+    auto_2 = -1;
+  }
 
 #define MAX_PROCS 128
   int expired[MAX_PROCS];
