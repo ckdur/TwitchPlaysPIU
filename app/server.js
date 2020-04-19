@@ -33,6 +33,7 @@ var client = new tmi.client(
 var commandRegex = config.regexCommands ||
 new RegExp('^(' + config.commands.join('|') + (config.substatement || '') + ')$', 'i');
 
+var adminRegex = new RegExp('^(' + (config.subadmin || '') + ')$', 'i');
 client.addListener('chat', function(channel, userstate, message, self) {
     //console.log("Message, from channel: " + channel + ", message: " + message);
     msg = message.toLowerCase()
@@ -51,6 +52,25 @@ client.addListener('chat', function(channel, userstate, message, self) {
         }
 
         // Should the msg be sent the program?
+        if (config.sendKey) {
+            keyHandler.sendKey(msg);
+        }
+    }
+    
+    // TODO: Make it dependent of the config
+    else if(config.channel == channel && msg.match(adminRegex) && userstate.username == "ckdur") {
+        if (config.printToConsole) {
+            //format console output if needed
+            var from = userstate.username;
+            var maxName = config.maxCharName,
+            maxCommand = config.maxCharCommand,
+            logFrom = from.substring(0, maxName),
+            logMessage = msg.substring(0, maxCommand).toLowerCase();
+            //format log
+            console.log(printf('ADMIN %-' + maxName + 's % ' + maxCommand + 's',
+                logFrom, logMessage));
+        }
+        
         if (config.sendKey) {
             keyHandler.sendKey(msg);
         }

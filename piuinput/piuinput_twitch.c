@@ -13,6 +13,8 @@
 #include <pthread.h>
 #include <glob.h>
 #include <usb.h>
+#include <X11/Xlib.h>
+#include <X11/Xutil.h>
 
 // Include external
 #include "KeyHandlerTwitch.h"
@@ -237,4 +239,36 @@ struct usb_bus *usb_get_busses(void)
 	return usb_busses;
 }
 
+int (*X11_XStoreName)( Display*, Window, _Xconst char* ) = NULL;
+int XStoreName(Display* d, Window w, _Xconst char* title) {
+  if( !X11_XStoreName )
+    X11_XStoreName = dlsym(RTLD_NEXT, "XStoreName");
+  check_autoplay(title);
+  return X11_XStoreName(d, w, title);
+}
+
+int (*X11_XSetStandardProperties)(Display *display,
+      Window w,
+      _Xconst char *window_name,
+      _Xconst char *icon_name,
+      Pixmap icon_pixmap,
+      char **argv,
+      int argc,
+      XSizeHints *hints) = NULL;
+
+int XSetStandardProperties(Display *display,
+      Window w,
+      _Xconst char *window_name,
+      _Xconst char *icon_name,
+      Pixmap icon_pixmap,
+      char **argv,
+      int argc,
+      XSizeHints *hints)
+{
+  if( !X11_XSetStandardProperties )
+    X11_XSetStandardProperties = dlsym(RTLD_NEXT, "XSetStandardProperties");
+  check_autoplay(window_name);
+  return X11_XSetStandardProperties(display, w, window_name, icon_name, icon_pixmap, argv, argc, hints);
+}
+      
 

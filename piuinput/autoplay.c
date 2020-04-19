@@ -1,3 +1,8 @@
+#include "autoplay.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 // PRIME v21 address for autoplay
 int auto_available = 0;
@@ -6,6 +11,13 @@ int auto_2 = -1;
 unsigned char* demo_var = (unsigned char*)0xE35CDE0;
 unsigned int* player1_auto = (unsigned int*)0xAB7E678;
 unsigned int* player2_auto = (unsigned int*)0xAB9F8A8;
+
+void check_autoplay(const char* title) {
+  if(strstr(title, "PRIME")) {
+    printf("The autoplay is supported\n");
+    auto_available = 1;
+  }
+}
 
 void update_autoplay () {
   

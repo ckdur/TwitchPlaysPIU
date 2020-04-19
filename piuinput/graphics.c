@@ -7,17 +7,33 @@
 #include <string.h>
 #include <pthread.h>
 #include <sys/time.h>
+#include <unistd.h>
 
 Display *d;
 Window w;
 XEvent e;
 int s;
 
-void* runhere(void* context) {
-  GC gc;
-  Colormap screen_colormap;
-  XColor red, brown, blue, yellow, green, white;
-  Status rc;
+GC gc;
+Colormap screen_colormap;
+XColor red, brown, blue, yellow, green, white;
+Status rc;
+unsigned long t1;
+
+void init_graphics(void) {
+
+  d = XOpenDisplay(NULL);
+  if (d == NULL) {
+    fprintf(stderr, "Cannot open display\n");
+    exit(1);
+  }
+
+  s = DefaultScreen(d);
+  w = XCreateSimpleWindow(d, RootWindow(d, s), 10, 10, 540, 230, 0,
+                         BlackPixel(d, s), BlackPixel(d, s));
+  XStoreName(d, w, "PIUIOMap");
+  XSelectInput(d, w, ExposureMask | KeyPressMask);
+  XMapWindow(d, w);
   
   gc = DefaultGC(d, s);
   screen_colormap = DefaultColormap(d, s);
@@ -52,16 +68,25 @@ void* runhere(void* context) {
     fprintf(stderr, "XAllocNamedColor - failed to allocated 'white' color.\n");
     exit(1);
   }
-  struct timeval tv;
-  gettimeofday(&tv,NULL);
-  unsigned long t1 = 1000000 * tv.tv_sec + tv.tv_usec;
-  while (1) {
+  
+  t1 = GetCurrentTime();
+}
+
+void update_graphics(void) {
     if (XPending(d) > 0)
     {
       XNextEvent(d, &e);
       if (e.type == Expose) {
-        
-        if(!(bytes_f[0] & 0x1) || !(bytes_g[0] & 0x1)) {
+        // Nothing
+      }
+    }
+    //usleep(10000);
+    unsigned long t2 = GetCurrentTime();
+    if((t2 - t1) > 10000) {
+      t1 = t2;
+      XClearArea(d, w, 0, 0, 540, 230, False);
+      
+      if(!(bytes_f[0] & 0x1) || !(bytes_g[0] & 0x1)) {
           XSetForeground(d, gc, red.pixel);
           XFillRectangle(d, w, gc, 5, 5, 60, 80);
         }
@@ -203,9 +228,32 @@ void* runhere(void* context) {
         char msg[255];
         XSetForeground(d, gc, white.pixel);
         sprintf(msg, "BPM: %.3g", fBPM);
-        XDrawString(d, w, gc, 60*3+5+70, 5+70+50+30, msg, strlen(msg));
+        XDrawString(d, w, gc, 5+60*3+5+60*2+90, 5+70+50+80 + 20, msg, strlen(msg));
         sprintf(msg, "D: %ldms", delay/1000);
-        XDrawString(d, w, gc, 60*3+5+70, 5+70+50+30+20, msg, strlen(msg));
+        XDrawString(d, w, gc, 5+60*3+5+60*2+170, 5+70+50+80 + 20, msg, strlen(msg));
+        
+        // Draw the freeplay - autoplay stuff
+        #define sizepix (60*6+5)
+        
+        int curx = 5 + (int)(currentAnarchy*sizepix);
+        int limx = 5 + (int)(limitAnarchy*sizepix);
+        
+        // Lines
+        XDrawLine(d, w, gc, curx, 5+70+50+80+ 10, curx, 5+70+50+80+ 20);
+        XSetForeground(d, gc, green.pixel);
+        XFillRectangle(d, w, gc, limx, 5+70+50+80+ 10, sizepix-limx+5, 10);
+        XSetForeground(d, gc, white.pixel);
+        if(directionAnarchy > 0) {
+          XDrawLine(d, w, gc, curx+2, 5+70+50+80+ 15, curx+12, 5+70+50+80+ 15);
+        }
+        else if(directionAnarchy < 0) {
+          XDrawLine(d, w, gc, curx-2, 5+70+50+80+ 15, curx-12, 5+70+50+80+ 15);
+        }
+        
+        // guides
+        XDrawRectangle(d, w, gc, 5, 5+70+50+80+ 10, sizepix, 10);
+        XDrawString(d, w, gc, 5,                5+70+50+80 + 10, "Freeplay", 8);
+        XDrawString(d, w, gc, 5+60*3+5+60*2+15, 5+70+50+80 + 10, "Autoplay", 8);
         
         //sprintf(msg, BYTE_TO_BINARY_PATTERN " " BYTE_TO_BINARY_PATTERN " " BYTE_TO_BINARY_PATTERN " " BYTE_TO_BINARY_PATTERN, 
         //  BYTE_TO_BINARY(bytes_l[3]), 
@@ -215,40 +263,6 @@ void* runhere(void* context) {
         // From x=375 available until 535
         //XDrawString(d, w, gc, 70, 5+70+50+30, msg, strlen(msg));
         //printf("Drawn: %.2x%.2x\n", (unsigned int)bytes_f[2] & 0xff, (unsigned int)bytes_f[0] & 0xff);
-      }
     }
-    gettimeofday(&tv,NULL);
-    unsigned long t2 = 1000000 * tv.tv_sec + tv.tv_usec;
-    if((t2 - t1) > 10000) {
-      t1 = t2;
-      XClearArea(d, w, 0, 0, 540, 210, True);
-    }
-  }
-}
-
-
-void init_graphics(void) {
-
-  d = XOpenDisplay(NULL);
-  if (d == NULL) {
-    fprintf(stderr, "Cannot open display\n");
-    exit(1);
-  }
-
-  s = DefaultScreen(d);
-  w = XCreateSimpleWindow(d, RootWindow(d, s), 10, 10, 540, 210, 0,
-                         BlackPixel(d, s), BlackPixel(d, s));
-  XStoreName(d, w, "PIUIOMap");
-  XSelectInput(d, w, ExposureMask | KeyPressMask);
-  XMapWindow(d, w);
-
-  pthread_t th;
-
-  if(pthread_create(&th, NULL, runhere, NULL) != 0){
-    puts("Could not create graphics thread");
-  }
-}
-
-void update_graphics(void) {
 }
 

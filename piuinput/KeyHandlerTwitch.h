@@ -26,4 +26,8 @@ unsigned long GetCurrentTime();
 double GetBeat(unsigned long t);
 double GetCurrentBeat();
 
+extern double limitAnarchy;
+extern double currentAnarchy;
+extern int directionAnarchy;
+
 #endif

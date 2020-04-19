@@ -11,16 +11,21 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <math.h>
+#include <fcntl.h>
 
 char bytes_t[4];
 char bytes_tb[2];
-pthread_mutex_t mutex;
-void* runserver(void*);
 void HandleBuffer(int deploy_full);
 struct command_spec* comms = NULL;
 int scomms = 0;
 int cap_comms = 128;
 unsigned long GetCurrentTime();
+
+int sockfd, newsockfd, portno;
+socklen_t clilen;
+char buffer[256];
+struct sockaddr_in serv_addr, cli_addr;
+int n;
 
 void check_comms_capacity(int size) {
   if(size < cap_comms) {
@@ -29,47 +34,46 @@ void check_comms_capacity(int size) {
   }
 }
 
-void KeyHandler_Twitch_Init(void) {
-	bytes_g[0] = 0xFF;
-	bytes_g[1] = 0xFF;
-	bytes_g[2] = 0xFF;
-	bytes_g[3] = 0xFF;
-	tlastchange = GetCurrentTime();
-	
-  pthread_t server;
-  
-  comms = (struct command_spec*)malloc(sizeof(struct command_spec)*cap_comms);
-  
-  if (pthread_mutex_init(&mutex, NULL) != 0) { 
-    printf("\n mutex init has failed for twitch server\n"); 
-    return; 
-  } 
-
-	if(pthread_create(&server, NULL, runserver, NULL) != 0){
-		puts("Could not create server twitch thread");
-	}
-}
-
 void error(const char *msg)
 {
   perror(msg);
   exit(1);
 }
 
-#define MAXBUF (1*1024*1024)
-char buf[MAXBUF];
-int siz = 0;
+void KeyHandler_Twitch_Init(void) {
+	bytes_g[0] = 0xFF;
+	bytes_g[1] = 0xFF;
+	bytes_g[2] = 0xFF;
+	bytes_g[3] = 0xFF;
+	bytes_t[0] = 0xFF;
+	bytes_t[1] = 0xFF;
+	bytes_t[2] = 0xFF;
+	bytes_t[3] = 0xFF;
+	bytes_tb[0] = 0xFF;
+	bytes_tb[1] = 0xFF;
+	tlastchange = GetCurrentTime();
+	
+  pthread_t server;
+  
+  comms = (struct command_spec*)malloc(sizeof(struct command_spec)*cap_comms);
+  
+  //if (pthread_mutex_init(&mutex, NULL) != 0) { 
+  //  printf("\n mutex init has failed for twitch server\n"); 
+  //  return; 
+  //} 
 
-void* runserver(void* context){
-
-	int sockfd, newsockfd, portno;
-  socklen_t clilen;
-  char buffer[256];
-  struct sockaddr_in serv_addr, cli_addr;
-  int n;
+	//if(pthread_create(&server, NULL, runserver, NULL) != 0){
+	//	puts("Could not create server twitch thread");
+	//}
+	
   sockfd = socket(AF_INET, SOCK_STREAM, 0);
   if (sockfd < 0) 
     error("ERROR opening socket");
+  
+  // Put it non/blocking
+  int flags = fcntl(sockfd, F_GETFL);
+  fcntl(sockfd, F_SETFL, flags | O_NONBLOCK);
+  
   bzero((char *) &serv_addr, sizeof(serv_addr));
   serv_addr.sin_family = AF_INET;
   serv_addr.sin_addr.s_addr = INADDR_ANY;
@@ -78,71 +82,76 @@ void* runserver(void* context){
           sizeof(serv_addr)) < 0) 
           error("ERROR on binding");
   listen(sockfd,5);
-  
-  int running = 1;
-  while(running) {
+}
+
+#define MAXBUF (1*1024*1024)
+char buf[MAXBUF];
+int siz = 0;
+
+char isListen = 0;
+unsigned long tlastaccept = 0;
+void handle_socket(void){
+  if(!isListen) {
+    // Try to accept the connection
     clilen = sizeof(cli_addr);
     newsockfd = accept(sockfd, 
                (struct sockaddr *) &cli_addr, 
                &clilen);
     if (newsockfd < 0) {
-      error("ERROR on accept");
-      continue;
+      if(!(errno == EAGAIN || errno == EWOULDBLOCK)) {
+        error("ERROR on accept");
+      }
+      //continue;
+    }
+    else {
+      isListen = 1;
+      tlastaccept = GetCurrentTime();
+      return; // Let another iteration handle the socket
+    }
+  }
+  
+  else { // Is listening
+    bzero(buffer,256);
+    n = recv(newsockfd,buffer,255,MSG_DONTWAIT);
+    if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+        perror("ERROR reading from socket");
+        return;
+    }
+    else {
+      unsigned long t2 = GetCurrentTime();
+      if((t2 - tlastaccept) > 5000000) // 5 seconds
+      {
+        printf("Timeout\n");
+        isListen = 0;
+        close(newsockfd);
+        return; // Try in the next iteration to do the accept
+      }
     }
     
-    struct timeval tv;
-    gettimeofday(&tv,NULL);
-    unsigned long t1 = 1000000 * tv.tv_sec + tv.tv_usec;
-    while(1) {
-      bzero(buffer,256);
-      n = recv(newsockfd,buffer,255,MSG_DONTWAIT);
-      if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
-          error("ERROR reading from socket");
-          break;
-      }
-      else {
-        gettimeofday(&tv,NULL);
-        unsigned long t2 = 1000000 * tv.tv_sec + tv.tv_usec;
-        if((t2 - t1) > 5000000) // 5 seconds
-        {
-          printf("Timeout\n");
-          break;
-        }
-      }
-      
-      if(n == 1 && buffer[0] == 'q') {
-        printf("Quiting the server\n");
-        running = 0;
-        break;
-      }
-      
-      if(buffer[0] == 'Q') {
-        printf("Quiting the client\n");
-        break;
-      }
-      
-      if(n > 0) {
-        // Renew the time of last connection
-        gettimeofday(&tv,NULL);
-        t1 = 1000000 * tv.tv_sec + tv.tv_usec;
-        while((siz+n) >= MAXBUF) {
-          HandleBuffer(1);
-        }
-        memcpy(buf + siz, buffer, n);
-        siz += n;
-        //printf("Here is the message (%d): %s\n", n, buffer);
-        //n = write(newsockfd, "I got your message", 18);
-        //if (n < 0) {
-        //  error("ERROR writing to socket");
-        //  break;
-        //}
-      }
-      HandleBuffer(0);
+    if(buffer[0] == 'Q') {
+      printf("Quiting the client\n");
+      isListen = 0;
+      close(newsockfd);
+      return; // Try in the next iteration to do the accept
     }
-    close(newsockfd);
+    
+    if(n > 0) {
+      // Renew the time of last connection
+      tlastaccept = GetCurrentTime();
+      while((siz+n) >= MAXBUF) {
+        HandleBuffer(1);
+      }
+      memcpy(buf + siz, buffer, n);
+      siz += n;
+      //printf("Here is the message (%d): %s\n", n, buffer);
+      //n = write(newsockfd, "I got your message", 18);
+      //if (n < 0) {
+      //  error("ERROR writing to socket");
+      //  break;
+      //}
+    }
+    HandleBuffer(0);
   }
-  close(sockfd);
-  return 0; 
 }
 
 void RebaseBuffer(int index) {
@@ -184,9 +193,16 @@ double GetCurrentBeat()
   return GetBeat(t);
 }
 
+double limitAnarchy = 0.8;
+double currentAnarchy = 0.5;
+int directionAnarchy = 0;
+int numberUsers = 100;
+double constVote = 1.0; // Each person has to vote 1 times
+unsigned long tlastVoted = 0;
+
 int ul = 0, ur = 0, ce = 0, dl = 0, dr = 0;
 char bytes_g[4];
-unsigned long delay = 0; // 5 secs
+unsigned long delay = 250000; // 5 secs
 double maxBeats = 8.0;
 void HandleBuffer(int deploy_full) {
   if(siz <= 0) return;
@@ -262,6 +278,56 @@ void HandleBuffer(int deploy_full) {
               delay = (unsigned long)((long)delay + k*1000);
               if(delay > 30000000) delay = 30000000;
             }
+            break;
+          }
+          
+          if(strcmp(fs, "setlimit") == 0) {
+            char* conv = f2+1;
+            double k;
+            int arg = sscanf(conv, "%lg", &k);
+            if(arg == 1) {
+              limitAnarchy = k;
+              if(limitAnarchy < 0.0) limitAnarchy = 0.0;
+              if(limitAnarchy > 1.0) limitAnarchy = 1.0;
+            }
+            break;
+          }
+          
+          if(strcmp(fs, "constvote") == 0) {
+            char* conv = f2+1;
+            double k;
+            int arg = sscanf(conv, "%lg", &k);
+            if(arg == 1) {
+              constVote = k;
+            }
+            break;
+          }
+          
+          if(strcmp(fs, "users") == 0) {
+            char* conv = f2+1;
+            int k;
+            int arg = sscanf(conv, "%d", &k);
+            if(arg == 1) {
+              numberUsers = k;
+            }
+            break;
+          }
+          
+          if(strcmp(fs, "freeplay") == 0 || strcmp(fs, "anarchy") == 0) {
+            tlastVoted = GetCurrentTime();
+            // Modulate the vote
+            currentAnarchy -= 1.0/(double)numberUsers/constVote;
+            if(currentAnarchy < 0.0) currentAnarchy = 0.0;
+            directionAnarchy--;
+            break;
+          }
+          
+          if(strcmp(fs, "autoplay") == 0 || strcmp(fs, "democracy") == 0) {
+            tlastVoted = GetCurrentTime();
+            // Modulate the vote
+            currentAnarchy += 1.0/(double)numberUsers/constVote;
+            if(currentAnarchy > 1.0) currentAnarchy = 1.0;
+            directionAnarchy++;
             break;
           }
         
@@ -351,7 +417,6 @@ void HandleBuffer(int deploy_full) {
       spec.beatEnd = spec.beat + addHold;
       
       // if this is true, we add the command
-      pthread_mutex_lock(&mutex);
       if(addBeat <= maxBeats && strcmp(bufaux, "nothing") != 0 && !notadd) {
         check_comms_capacity(scomms + 1);
         memcpy(&comms[scomms], &spec, sizeof(struct command_spec));
@@ -361,7 +426,6 @@ void HandleBuffer(int deploy_full) {
         
         // TODO: Ok, now we added the command, but now we need to check the holds a little
       }
-      pthread_mutex_unlock(&mutex);
       
       bufaux = f + 1;
       if(bufaux >= bufend) {
@@ -377,7 +441,6 @@ void HandleBuffer(int deploy_full) {
 
 void OnUpdateBPM(unsigned long bef, double bBPM) {
   // In this function, we want to update the beat of all the stuff, as the reference updated
-  pthread_mutex_lock(&mutex);
   
   double beats = GetBeat2(tlastchange - bef, bBPM);
   printf("The number of beats to update: %g\n", beats);
@@ -386,23 +449,30 @@ void OnUpdateBPM(unsigned long bef, double bBPM) {
     comms[i].beatEnd -= beats;
     printf("Command %d changed: %g\n", i, comms[i].beat);
   }
-  
-  pthread_mutex_unlock(&mutex);
 }
 
 void KeyHandler_Twitch_Poll(void) {
-  pthread_mutex_lock(&mutex);
+  
   bytes_t[0] = 0xFF;
   bytes_t[1] = 0xFF;
   bytes_t[2] = 0xFF;
   bytes_t[3] = 0xFF;
   bytes_tb[0] = 0xFF;
   bytes_tb[1] = 0xFF;
+  
+  handle_socket();
 
 #define MAX_PROCS 128
   int expired[MAX_PROCS];
   int count = 0;
   double beat = GetCurrentBeat();
+  // Erase the last voted at certain number of beats
+  if(directionAnarchy != 0) {
+    double beatLastVoted = GetBeat(tlastVoted);
+    if((beat - beatLastVoted) > 4.0);
+      directionAnarchy = 0;
+  }
+  
   // Explore all the commands for now
   for(int i = 0; i < scomms; i++) {
     if(beat >= comms[i].beat) {
@@ -441,7 +511,6 @@ void KeyHandler_Twitch_Poll(void) {
     }
     scomms -= count;
   }
-  pthread_mutex_unlock(&mutex);
 }
 
 double fBPM = 120.0; // Assumed from the beginning
