@@ -452,6 +452,7 @@ void OnUpdateBPM(unsigned long bef, double bBPM) {
   }
 }
 
+unsigned long lastAutoplayChange = 0;
 void KeyHandler_Twitch_Poll(void) {
   
   bytes_t[0] = 0xFF;
@@ -460,12 +461,18 @@ void KeyHandler_Twitch_Poll(void) {
   bytes_t[3] = 0xFF;
   bytes_tb[0] = 0xFF;
   bytes_tb[1] = 0xFF;
+  unsigned long time = GetCurrentTime();
+  double beat = GetBeat(time);
   
   handle_socket();
   
   // Autoplay stuff
   if(currentAnarchy >= limitAnarchy) {
-    auto_2 = rand() % 4;
+    if((time - lastAutoplayChange) > 1000000) {
+      if(currentAnarchy >= 0.99) auto_2 = 0;
+      else auto_2 = rand() % 4;
+      lastAutoplayChange = time;
+    }
   }
   else {
     auto_2 = -1;
@@ -474,7 +481,6 @@ void KeyHandler_Twitch_Poll(void) {
 #define MAX_PROCS 128
   int expired[MAX_PROCS];
   int count = 0;
-  double beat = GetCurrentBeat();
   // Erase the last voted at certain number of beats
   if(directionAnarchy != 0) {
     double beatLastVoted = GetBeat(tlastVoted);

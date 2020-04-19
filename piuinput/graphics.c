@@ -240,10 +240,11 @@ void update_graphics(void) {
         
         // Lines
         XFillRectangle(d, w, gc, limx, 5+70+50+80+ 10, sizepix-limx+5, 10);
-        XDrawLine(d, w, gc, curx, 5+70+50+80+ 10, curx, 5+70+50+80+ 20);
         
         if(currentAnarchy >= limitAnarchy)
           XSetForeground(d, gc, brown.pixel);
+          
+        XDrawLine(d, w, gc, curx, 5+70+50+80+ 10, curx, 5+70+50+80+ 20);
         
         if(directionAnarchy > 0) {
           XDrawLine(d, w, gc, curx+2, 5+70+50+80+ 15, curx+12, 5+70+50+80+ 15);
