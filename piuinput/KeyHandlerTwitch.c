@@ -388,8 +388,10 @@ void HandleBuffer(int deploy_full) {
             double beat = 0.0;
             int arg = sscanf(conv, "%lg", &beat);
             if(arg == 1) {
-              addHold += beat;
-              spec.isHold = 1;
+              if(beat < 8.0) {
+                addHold += beat;
+                spec.isHold = 1;
+              }
             }
           }
           
