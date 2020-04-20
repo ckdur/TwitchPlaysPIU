@@ -236,6 +236,11 @@ void HandleBuffer(int deploy_full) {
       char* f2 = bufaux;
       char* fs = bufaux;
       char first = 1;
+      char p1s[12];
+      char p2s[12];
+      int pscount = 0;
+      memset(p1s, 0xFFFFFFFF, 12);
+      memset(p2s, 0xFFFFFFFF, 12);
       struct command_spec spec;
       spec.p1 = 0xFF;
       spec.p2 = 0xFF;
@@ -246,7 +251,7 @@ void HandleBuffer(int deploy_full) {
       // at 1/4 of the beat
       // So, the beat has to be a multiple of 1/4
       unsigned long t = GetCurrentTime() + delay;
-      double addBeat = 0.0;
+      double addBeat = 0.25;
       double addHold = 0.0;
       double beatAlign = 0.25;
       char notadd = 0;
@@ -314,7 +319,7 @@ void HandleBuffer(int deploy_full) {
             break;
           }
           
-          if(strcmp(fs, "freeplay") == 0 || strcmp(fs, "anarchy") == 0) {
+          if(memcmp(fs, "freeplay", 8) == 0 || memcmp(fs, "anarchy", 7) == 0) {
             tlastVoted = GetCurrentTime();
             // Modulate the vote
             currentAnarchy -= 1.0/(double)numberUsers/constVote;
@@ -323,7 +328,7 @@ void HandleBuffer(int deploy_full) {
             break;
           }
           
-          if(strcmp(fs, "autoplay") == 0 || strcmp(fs, "democracy") == 0) {
+          if(memcmp(fs, "autoplay", 8) == 0 || memcmp(fs, "democracy", 9) == 0) {
             tlastVoted = GetCurrentTime();
             // Modulate the vote
             currentAnarchy += 1.0/(double)numberUsers/constVote;
@@ -350,19 +355,25 @@ void HandleBuffer(int deploy_full) {
           int len = strlen(fs);
           for(int i = 0; i < len; i++) {
             if(fs[i] == 'q' || fs[i] == '7') {
-              spec.p2 &= ~0x1;
+              p2s[pscount] &= ~0x1;
             }
             if(fs[i] == 'e' || fs[i] == '9') {
-              spec.p2 &= ~0x2;
+              p2s[pscount] &= ~0x2;
             }
             if(fs[i] == 's' || fs[i] == '5') {
-              spec.p2 &= ~0x4;
+              p2s[pscount] &= ~0x4;
             }
             if(fs[i] == 'z' || fs[i] == '1') {
-              spec.p2 &= ~0x8;
+              p2s[pscount] &= ~0x8;
             }
             if(fs[i] == 'c' || fs[i] == '3') {
-              spec.p2 &= ~0x10;
+              p2s[pscount] &= ~0x10;
+            }
+            if(fs[i] == '-') {
+              if(pscount >= 11) {
+                break;
+              }
+              pscount++;
             }
           }
         }
@@ -420,12 +431,21 @@ void HandleBuffer(int deploy_full) {
       spec.beatEnd = spec.beat + addHold;
       
       // if this is true, we add the command
-      if(addBeat <= maxBeats && strcmp(bufaux, "nothing") != 0 && !notadd) {
-        check_comms_capacity(scomms + 1);
-        memcpy(&comms[scomms], &spec, sizeof(struct command_spec));
-        scomms++;
+      if(addBeat <= maxBeats && strcmp(bufaux, "nothing") != 0 && !notadd && pscount >= 0) {
+        for(int k = 0; k <= pscount; k++) {
+          spec.p1 = p1s[k];
+          spec.p2 = p2s[k];
+          
+          check_comms_capacity(scomms + 1);
+          memcpy(&comms[scomms], &spec, sizeof(struct command_spec));
+          scomms++;
+          
+          printf("Added command (%d:%d): %.2x %.2x %g %g (%d)\n", scomms, cap_comms, spec.p1, spec.p2, spec.beat, spec.beatEnd, spec.isHold);
+          
+          spec.beat += addBeat;
+          spec.beatEnd += addBeat;
+        }
         
-        printf("Added command (%d:%d): %.2x %.2x %g %g (%d)\n", scomms, cap_comms, spec.p1, spec.p2, spec.beat, spec.beatEnd, spec.isHold);
         
         // TODO: Ok, now we added the command, but now we need to check the holds a little
       }

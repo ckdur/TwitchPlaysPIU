@@ -8,7 +8,7 @@ var commands = [
 ];
 
 var subadmin = '|delay\\s+[\-0-9]+|setlimit\\s+[\.0-9]+|constvote\\s+[\.0-9]+';
-var substatement = '|[79513qeszc]+|upleft|upright|center|downleft|downright|[79513qeszc]+\\s+.+|upleft\\s+.+|upright\\s+.+|center\\s+.+|downleft\\s+.+|downright\\s+.+';
+var substatement = '|[\-79513qeszc]+|upleft|upright|center|downleft|downright|autoplay.+|freeplay.+|[\-79513qeszc]+\\s+.+|upleft\\s+.+|upright\\s+.+|center\\s+.+|downleft\\s+.+|downright\\s+.+';
 
 var username = process.env.TWITCH_USERNAME || nconf.get('TWITCH_USERNAME');
 var oauth = process.env.TWITCH_OAUTH || nconf.get('TWITCH_OAUTH');
