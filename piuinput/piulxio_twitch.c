@@ -175,7 +175,9 @@ int LIBUSB_CALL libusb_init(libusb_context **ctx) {
     // And now, init the USB
     printf("CKDUR: libusb_init (1.0) %d\n", __LINE__);
 
-    *ctx = malloc(sizeof(struct libusb_context));
+    if(ctx != NULL) {
+        *ctx = malloc(sizeof(struct libusb_context));
+    }
 
     return 0;
 }
@@ -190,6 +192,7 @@ ssize_t LIBUSB_CALL libusb_get_device_list(libusb_context *ctx, libusb_device **
     printf("CKDUR: libusb_get_device_list (1.0) %d\n", __LINE__);
     *list = malloc(sizeof(struct libusb_device*)*2);
     (*list)[0] = malloc(sizeof(struct libusb_device));
+    printf("  Reference of lxio device is in %p\n", (*list)[0]);
     (*list)[0]->pid = PIULXIO_PRODUCT_ID;
     (*list)[0]->vid = PIULXIO_VENDOR_ID;
     (*list)[1] = NULL;
@@ -201,13 +204,14 @@ void LIBUSB_CALL libusb_free_device_list(libusb_device **list, int unref_devices
     if(list && *list && unref_devices) {
         free(*list);
     }
-    free(list);
+    if(list) free(list);
 }
 
 // libusb_get_device_descriptor
 int LIBUSB_CALL libusb_get_device_descriptor(libusb_device *dev, struct libusb_device_descriptor *desc) {
     printf("CKDUR: libusb_get_device_descriptor (1.0) %d\n", __LINE__);
-    if(dev->pid == PIULXIO_PRODUCT_ID && dev->vid == PIULXIO_PRODUCT_ID) {
+    printf("  Called with reference %p\n", dev);
+    if(dev->pid == PIULXIO_PRODUCT_ID && dev->vid == PIULXIO_VENDOR_ID) {
         memcpy(desc, &piulxio_dev_desc, sizeof(struct libusb_device_descriptor));
         return 0;
     }
@@ -224,7 +228,7 @@ void helper_fill_config_descriptor(struct libusb_config_descriptor *config, uint
 // libusb_get_config_descriptor
 int LIBUSB_CALL libusb_get_config_descriptor(libusb_device *dev, uint8_t config_index, struct libusb_config_descriptor **config) {
     printf("CKDUR: libusb_get_config_descriptor (1.0) %d\n", __LINE__);
-    if(dev->pid == PIULXIO_PRODUCT_ID && dev->vid == PIULXIO_PRODUCT_ID) {
+    if(dev->pid == PIULXIO_PRODUCT_ID && dev->vid == PIULXIO_VENDOR_ID) {
         *config = malloc(sizeof(struct libusb_config_descriptor));
         helper_fill_config_descriptor(*config, config_index);
         return 0;
@@ -234,7 +238,7 @@ int LIBUSB_CALL libusb_get_config_descriptor(libusb_device *dev, uint8_t config_
 // libusb_get_active_config_descriptor
 int LIBUSB_CALL libusb_get_active_config_descriptor(libusb_device *dev, struct libusb_config_descriptor **config) {
     printf("CKDUR: libusb_get_active_config_descriptor (1.0) %d\n", __LINE__);
-    if(dev->pid == PIULXIO_PRODUCT_ID && dev->vid == PIULXIO_PRODUCT_ID) {
+    if(dev->pid == PIULXIO_PRODUCT_ID && dev->vid == PIULXIO_VENDOR_ID) {
         *config = malloc(sizeof(struct libusb_config_descriptor));
         helper_fill_config_descriptor(*config, 0);
         return 0;
@@ -264,7 +268,7 @@ uint8_t LIBUSB_CALL libusb_get_bus_number(libusb_device *dev) {
 // libusb_open
 int LIBUSB_CALL libusb_open(libusb_device *dev, libusb_device_handle **dev_handle) {
     printf("CKDUR: libusb_open (1.0) %d\n", __LINE__);
-    if(dev->pid == PIULXIO_PRODUCT_ID && dev->vid == PIULXIO_PRODUCT_ID) {
+    if(dev->pid == PIULXIO_PRODUCT_ID && dev->vid == PIULXIO_VENDOR_ID) {
         *dev_handle = malloc(sizeof(struct libusb_device_handle));
         (*dev_handle)->a0 = 0;
         return 0;
@@ -324,10 +328,18 @@ int LIBUSB_CALL libusb_control_transfer(libusb_device_handle *dev_handle,
             }
         }
         else if (wIndex == 0 && request_type == 0xA1 && bRequest == PIULXIO_HID_SET_REPORT) {
+
+            poll_keyboards();
+            poll_joysticks();
+            KeyHandler_Twitch_Poll();
+            update_autoplay();
+
             printf("push data %x %x %x %x %x\r\n", request_type, bRequest, wValue, wIndex, wLength);
             int ret = sizeof(dataOut);
             memcpy(data, dataOut, ret);
             return ret;
+
+            update_graphics();
         }
         else if(wIndex == 0 && request_type == 0x21 && bRequest == PIULXIO_HID_SET_REPORT ) {
             printf("recv data %x %x %x %x %x\r\n", request_type, bRequest, wValue, wIndex, wLength);
@@ -346,15 +358,32 @@ int LIBUSB_CALL libusb_interrupt_transfer(libusb_device_handle *dev_handle,
     
 
     if(dev_handle->a0 == 0) {
-        printf("reqtype ep=%x len=%x\n", (int)endpoint, length);
-        if(endpoint == PIULXIO_ENDPOINT_IN) {
+        //printf("int trasnsfer ep=%x len=%x\n", (int)endpoint, length);
+        if((endpoint & 0x7F) == PIULXIO_ENDPOINT_IN) {
+            printf("Pulling\n");
+
+            poll_keyboards();
+            poll_joysticks();
+            KeyHandler_Twitch_Poll();
+            update_autoplay();
+
             int ret = min(sizeof(dataIn), length);
             memcpy(dataIn, data, ret);
             *actual_length = ret;
+
+            update_graphics();
+
             return ret;
         }
         else if(endpoint == PIULXIO_ENDPOINT_OUT) {
+            // KeyHandler_Twitch_UpdateLights(bytes);
             int ret = min(sizeof(dataOut), length);
+            for(int i = 0; i < ret; i++) {
+                if(data[i] != dataOut[i]) {
+                    printf("Assigning %02x: %02x <- %02x\n", i, dataOut[i], data[i]);
+                    dataOut[i] = data[i];
+                }
+            }
             memcpy(data, dataOut, ret);
             *actual_length = ret;
             return ret;
@@ -370,25 +399,96 @@ int LIBUSB_CALL libusb_interrupt_transfer(libusb_device_handle *dev_handle,
 
 // libusb_alloc_transfer
 struct libusb_transfer * LIBUSB_CALL libusb_alloc_transfer(int iso_packets) {
-    return NULL;
+    printf("CKDUR: libusb_alloc_transfer (1.0) %d\n", __LINE__);
+    struct libusb_transfer * tr = malloc(sizeof(struct libusb_transfer));
+    memset(tr, 0, sizeof(struct libusb_transfer));
+    return tr;
 }
 
 // libusb_submit_transfer
+struct libusb_transfer * current_transfer = NULL;
 int LIBUSB_CALL libusb_submit_transfer(struct libusb_transfer *transfer) {
+    //printf("CKDUR: libusb_submit_transfer (1.0) %d\n", __LINE__);
+    current_transfer = transfer;
     return 0;
 }
 
 // libusb_cancel_transfer
 int LIBUSB_CALL libusb_cancel_transfer(struct libusb_transfer *transfer) {
+    printf("CKDUR: libusb_cancel_transfer (1.0) %d\n", __LINE__);
+    if(transfer && current_transfer) current_transfer = NULL;
     return 0;
 }
 
 // libusb_free_transfer
 void LIBUSB_CALL libusb_free_transfer(struct libusb_transfer *transfer) {
+    printf("CKDUR: libusb_free_transfer (1.0) %d\n", __LINE__);
+    if(transfer) {
+        free(transfer);
+    }
 }
 
 // libusb_handle_events
+uint8_t obytes[16] = {0x0,};
 int LIBUSB_CALL libusb_handle_events(libusb_context *ctx){
+    //printf("CKDUR: libusb_handle_events (1.0) %d\n", __LINE__);
+    if(current_transfer) {
+        struct libusb_transfer *transfer = current_transfer;
+        current_transfer = NULL;
+        // printf("Processing transfers to endp=%d %x\n", (int)transfer->endpoint, (int)transfer->length);
+        if(transfer->dev_handle == NULL) return 0;
+        if(transfer->dev_handle->a0 != 0) return 0;
+        if(transfer->type != LIBUSB_TRANSFER_TYPE_INTERRUPT) return 0;
+        transfer->status = LIBUSB_TRANSFER_COMPLETED;
+        if((transfer->endpoint & 0x7F) == PIULXIO_ENDPOINT_IN) {
+
+            poll_keyboards();
+            poll_joysticks();
+            KeyHandler_Twitch_Poll();
+            update_autoplay();
+
+            int ret = 16;
+            memset(transfer->buffer, 0, ret);
+            transfer->actual_length = ret;
+            uint8_t* bytes = transfer->buffer;
+
+            // p1 stuff
+            bytes_f[0] = bytes[0] = bytes[1] = bytes[2] = bytes[3] = bytes_j[0] & bytes_p[0] & bytes_t[0];
+            // p2 stuff
+            bytes_f[2] = bytes[4] = bytes[5] = bytes[6] = bytes[7] = bytes_j[2] & bytes_p[2] & bytes_t[2];
+            // coin stuff
+            bytes_f[1] = bytes[8] = bytes_j[1] & bytes_p[1] & bytes_t[1];
+            bytes_f[3] = bytes[9] = bytes_j[3] & bytes_p[3] & bytes_t[3];
+            
+            bytes[10] = bytes_f[3];
+            bytes[11] = bytes_f[3];
+            bytes[12] = bytes_f[3];
+            bytes[13] = bytes_f[3];
+            bytes[14] = bytes_f[3];
+            bytes[15] = bytes_f[3];
+            
+            //bytes_f[3] = bytes[3] = bytes_j[3] & bytes_p[3] & bytes_t[3];
+
+            /*for(int i = 0; i < 16; i++) {
+                obytes[i] ^= 0xFF;
+            }
+            memcpy(transfer->buffer, obytes, 16);*/
+
+            update_graphics();
+        }
+        else if(transfer->endpoint == PIULXIO_ENDPOINT_OUT) {
+            int ret = min(sizeof(dataOut), transfer->length);
+            memcpy(transfer->buffer, dataOut, ret);
+            transfer->actual_length = ret;
+        }
+        else {
+            printf("Unknown endpoint %d\n", (int)transfer->endpoint);
+            return -1;
+        }
+        transfer->callback(transfer);
+    } else {
+        //printf("No transfers\n");
+    }
     return 0;
 }
 

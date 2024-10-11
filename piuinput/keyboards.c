@@ -107,7 +107,7 @@ void poll_keyboards(void) {
 	  byte = 0;
     if(keyp(key_map, KEY_F5))
         byte |= (0x1);
-    if(keyp(key_map, KEY_F7))
+    if(keyp(key_map, KEY_F6))
         byte |= (0x2);
     if(keyp(key_map, KEY_F7))
         byte |= (0x4);
