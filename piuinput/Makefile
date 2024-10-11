@@ -1,5 +1,5 @@
 CC?=gcc
-OBJ=keyboards.o joysticks.o autoplay.o KeyHandlerTwitch.o graphics.o piuinput_twitch.o
+OBJ=keyboards.o joysticks.o autoplay.o KeyHandlerTwitch.o graphics.o piuinput_twitch.o piulxio_twitch.o
 
 all: piuinput.so
 
