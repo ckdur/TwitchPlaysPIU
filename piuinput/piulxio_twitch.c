@@ -168,7 +168,63 @@ struct libusb_device_handle {
     int a0;
 };
 
-int (*libusb_libusb_init)(libusb_context **ctx) = NULL;
+#define min(a, b) ((a)<(b)?(a):(b))
+int helper_process_data_in(uint8_t* bytes, int size) {
+    poll_keyboards();
+    poll_joysticks();
+    KeyHandler_Twitch_Poll();
+    update_autoplay();
+
+    // p1 stuff
+    bytes_f[0] = bytes[0] = bytes[1] = bytes[2] = bytes[3] = bytes_j[0] & bytes_p[0] & bytes_t[0];
+    // p2 stuff
+    bytes_f[2] = bytes[4] = bytes[5] = bytes[6] = bytes[7] = bytes_j[2] & bytes_p[2] & bytes_t[2];
+    // coin stuff
+    bytes_f[1] = bytes[8] = bytes_j[1] & bytes_p[1] & bytes_t[1];
+    bytes_f[3] = bytes[9] = bytes_j[3] & bytes_p[3] & bytes_t[3];
+    
+    bytes[10] = bytes_f[3];
+    bytes[11] = bytes_f[3];
+    bytes[12] = bytes_f[3];
+    bytes[13] = bytes_f[3];
+    bytes[14] = bytes_f[3];
+    bytes[15] = bytes_f[3];
+
+
+    update_graphics();
+    return 16;
+}
+
+int helper_process_data_out(uint8_t* data, int size) {
+    int ret = min(sizeof(dataOut), size);
+    KeyHandler_Twitch_UpdateLights(data);
+    
+    // Extract the light status
+    char L1 = (data[2] & 0x80) ? 1:0 ;
+    char L2 = (data[3] & 0x01) ? 1:0 ;
+    char L3 = (data[3] & 0x04) ? 1:0 ;
+    char L4 = (data[3] & 0x02) ? 1:0 ;
+    char L5 = (data[1] & 0x04) ? 1:0 ;
+
+    // USBs?
+    char U1 = (data[3] & 0x10) ? 1:0 ;
+    char U2 = (data[3] & 0x20) ? 1:0 ;
+    char U3 = (data[3] & 0x40) ? 1:0 ;
+
+    bytes_l[0] = data[0];
+    bytes_l[1] = data[1];
+    bytes_l[2] = data[2];
+    bytes_l[3] = data[3];
+
+    /*for(int i = 0; i < ret; i++) {
+        if(data[i] != dataOut[i]) {
+            printf("Assigning %02x: %02x <- %02x\n", i, dataOut[i], data[i]);
+            dataOut[i] = data[i];
+        }
+    }*/
+
+    return ret;
+}
 
 // libusb_init
 int LIBUSB_CALL libusb_init(libusb_context **ctx) {
@@ -284,8 +340,6 @@ void LIBUSB_CALL libusb_close(libusb_device_handle *dev_handle) {
     }
 }
 
-#define min(a, b) ((a)<(b)?(a):(b))
-
 // libusb_control_transfer
 int LIBUSB_CALL libusb_control_transfer(libusb_device_handle *dev_handle,
 	uint8_t request_type, uint8_t bRequest, uint16_t wValue, uint16_t wIndex,
@@ -328,24 +382,12 @@ int LIBUSB_CALL libusb_control_transfer(libusb_device_handle *dev_handle,
             }
         }
         else if (wIndex == 0 && request_type == 0xA1 && bRequest == PIULXIO_HID_SET_REPORT) {
-
-            poll_keyboards();
-            poll_joysticks();
-            KeyHandler_Twitch_Poll();
-            update_autoplay();
-
-            printf("push data %x %x %x %x %x\r\n", request_type, bRequest, wValue, wIndex, wLength);
-            int ret = sizeof(dataOut);
-            memcpy(data, dataOut, ret);
-            return ret;
-
-            update_graphics();
+            //printf("push data %x %x %x %x %x\r\n", request_type, bRequest, wValue, wIndex, wLength);
+            return helper_process_data_out(data, wLength);
         }
         else if(wIndex == 0 && request_type == 0x21 && bRequest == PIULXIO_HID_SET_REPORT ) {
-            printf("recv data %x %x %x %x %x\r\n", request_type, bRequest, wValue, wIndex, wLength);
-            int ret = sizeof(dataIn);
-            memcpy(dataIn, data, ret);
-            return ret;
+            //printf("recv data %x %x %x %x %x\r\n", request_type, bRequest, wValue, wIndex, wLength);
+            return helper_process_data_in(data, wLength);
         }
     }
     return -1;
@@ -360,33 +402,12 @@ int LIBUSB_CALL libusb_interrupt_transfer(libusb_device_handle *dev_handle,
     if(dev_handle->a0 == 0) {
         //printf("int trasnsfer ep=%x len=%x\n", (int)endpoint, length);
         if((endpoint & 0x7F) == PIULXIO_ENDPOINT_IN) {
-            printf("Pulling\n");
-
-            poll_keyboards();
-            poll_joysticks();
-            KeyHandler_Twitch_Poll();
-            update_autoplay();
-
-            int ret = min(sizeof(dataIn), length);
-            memcpy(dataIn, data, ret);
-            *actual_length = ret;
-
-            update_graphics();
-
-            return ret;
+            *actual_length = helper_process_data_in(data, length);
+            return *actual_length;
         }
         else if(endpoint == PIULXIO_ENDPOINT_OUT) {
-            // KeyHandler_Twitch_UpdateLights(bytes);
-            int ret = min(sizeof(dataOut), length);
-            for(int i = 0; i < ret; i++) {
-                if(data[i] != dataOut[i]) {
-                    printf("Assigning %02x: %02x <- %02x\n", i, dataOut[i], data[i]);
-                    dataOut[i] = data[i];
-                }
-            }
-            memcpy(data, dataOut, ret);
-            *actual_length = ret;
-            return ret;
+            *actual_length = helper_process_data_out(data, length);
+            return *actual_length;
         }
         else {
             printf("Unknown endpoint %d\n", (int)endpoint);
@@ -429,7 +450,6 @@ void LIBUSB_CALL libusb_free_transfer(struct libusb_transfer *transfer) {
 }
 
 // libusb_handle_events
-uint8_t obytes[16] = {0x0,};
 int LIBUSB_CALL libusb_handle_events(libusb_context *ctx){
     //printf("CKDUR: libusb_handle_events (1.0) %d\n", __LINE__);
     if(current_transfer) {
@@ -441,45 +461,10 @@ int LIBUSB_CALL libusb_handle_events(libusb_context *ctx){
         if(transfer->type != LIBUSB_TRANSFER_TYPE_INTERRUPT) return 0;
         transfer->status = LIBUSB_TRANSFER_COMPLETED;
         if((transfer->endpoint & 0x7F) == PIULXIO_ENDPOINT_IN) {
-
-            poll_keyboards();
-            poll_joysticks();
-            KeyHandler_Twitch_Poll();
-            update_autoplay();
-
-            int ret = 16;
-            memset(transfer->buffer, 0, ret);
-            transfer->actual_length = ret;
-            uint8_t* bytes = transfer->buffer;
-
-            // p1 stuff
-            bytes_f[0] = bytes[0] = bytes[1] = bytes[2] = bytes[3] = bytes_j[0] & bytes_p[0] & bytes_t[0];
-            // p2 stuff
-            bytes_f[2] = bytes[4] = bytes[5] = bytes[6] = bytes[7] = bytes_j[2] & bytes_p[2] & bytes_t[2];
-            // coin stuff
-            bytes_f[1] = bytes[8] = bytes_j[1] & bytes_p[1] & bytes_t[1];
-            bytes_f[3] = bytes[9] = bytes_j[3] & bytes_p[3] & bytes_t[3];
-            
-            bytes[10] = bytes_f[3];
-            bytes[11] = bytes_f[3];
-            bytes[12] = bytes_f[3];
-            bytes[13] = bytes_f[3];
-            bytes[14] = bytes_f[3];
-            bytes[15] = bytes_f[3];
-            
-            //bytes_f[3] = bytes[3] = bytes_j[3] & bytes_p[3] & bytes_t[3];
-
-            /*for(int i = 0; i < 16; i++) {
-                obytes[i] ^= 0xFF;
-            }
-            memcpy(transfer->buffer, obytes, 16);*/
-
-            update_graphics();
+            transfer->actual_length = helper_process_data_in(transfer->buffer, transfer->length);
         }
         else if(transfer->endpoint == PIULXIO_ENDPOINT_OUT) {
-            int ret = min(sizeof(dataOut), transfer->length);
-            memcpy(transfer->buffer, dataOut, ret);
-            transfer->actual_length = ret;
+            transfer->actual_length = helper_process_data_out(transfer->buffer, transfer->length);
         }
         else {
             printf("Unknown endpoint %d\n", (int)transfer->endpoint);
